@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, X, Leaf } from 'lucide-react';
+import { useI18n } from '../i18n/I18nProvider';
 
 interface NavigationProps {
   currentPage: string;
@@ -8,12 +9,13 @@ interface NavigationProps {
 
 const Navigation: React.FC<NavigationProps> = ({ currentPage, onNavigate }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { t, language, setLanguage } = useI18n();
 
   const menuItems = [
-    { id: 'home', label: 'HOME', page: 'home' as const },
-    { id: 'abstract', label: 'ABSTRACT', page: 'abstract' as const },
-    { id: 'detection', label: 'PEST DETECTION', page: 'detection' as const },
-    { id: 'technical', label: 'TECHNICAL DETAILS', page: 'technical' as const },
+    { id: 'home', label: t('nav_home'), page: 'home' as const },
+    { id: 'abstract', label: t('nav_abstract'), page: 'abstract' as const },
+    { id: 'detection', label: t('nav_detection'), page: 'detection' as const },
+    { id: 'technical', label: t('nav_technical'), page: 'technical' as const },
   ];
 
   const handleNavigation = (page: 'home' | 'abstract' | 'detection' | 'technical') => {
@@ -30,7 +32,7 @@ const Navigation: React.FC<NavigationProps> = ({ currentPage, onNavigate }) => {
             onClick={() => handleNavigation('home')}
           >
             <Leaf className="h-8 w-8 text-green-600" />
-            <span className="text-xl font-bold text-gray-900">PeanutGuard AI</span>
+            <span className="text-xl font-bold text-gray-900">{t('app_title')}</span>
           </div>
 
           {/* Desktop Menu */}
@@ -48,6 +50,18 @@ const Navigation: React.FC<NavigationProps> = ({ currentPage, onNavigate }) => {
                 {item.label}
               </button>
             ))}
+            <div className="flex items-center space-x-2">
+              <label htmlFor="lang" className="sr-only">{t('language')}</label>
+              <select
+                id="lang"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as any)}
+                className="border border-gray-300 rounded-md text-sm px-2 py-1"
+              >
+                <option value="en">English</option>
+                <option value="hi">हिन्दी</option>
+              </select>
+            </div>
           </div>
 
           {/* Mobile menu button */}
@@ -78,6 +92,18 @@ const Navigation: React.FC<NavigationProps> = ({ currentPage, onNavigate }) => {
                   {item.label}
                 </button>
               ))}
+              <div className="px-3 py-2">
+                <label htmlFor="lang-m" className="block text-xs text-gray-500 mb-1">{t('language')}</label>
+                <select
+                  id="lang-m"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as any)}
+                  className="border border-gray-300 rounded-md text-sm px-2 py-1 w-full"
+                >
+                  <option value="en">English</option>
+                  <option value="hi">हिन्दी</option>
+                </select>
+              </div>
             </div>
           </div>
         )}

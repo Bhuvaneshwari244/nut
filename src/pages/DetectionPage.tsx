@@ -1,5 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, Camera, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
+import { useI18n } from '../i18n/I18nProvider';
+import { detectPest, fetchWeather, fetchSatellite, sendAlert, submitFeedback } from '../lib/api';
 
 interface DetectionResult {
   pestName: string;
@@ -10,11 +12,17 @@ interface DetectionResult {
 }
 
 const DetectionPage: React.FC = () => {
+  const { t } = useI18n();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [weather, setWeather] = useState<{ temp_c: number; rain_mm_next_24h: number; advice: string } | null>(null);
+  const [satellite, setSatellite] = useState<{ ndvi: number; description: string } | null>(null);
+  const [phone, setPhone] = useState<string>('');
+  const [correctLabel, setCorrectLabel] = useState<string>('');
+  const [comments, setComments] = useState<string>('');
 
   const pestDatabase: DetectionResult[] = [
     {
@@ -115,20 +123,32 @@ const DetectionPage: React.FC = () => {
 
   const simulateDetection = async () => {
     if (!selectedFile) return;
-
     setIsProcessing(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Simulate detection result
-    const randomResult = pestDatabase[Math.floor(Math.random() * pestDatabase.length)];
-    setResult({
-      ...randomResult,
-      confidence: Math.random() * 10 + 85 // Random confidence between 85-95%
-    });
-    
-    setIsProcessing(false);
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const det = await detectPest(formData);
+      setResult(det);
+      // Try geolocation for context-aware advice
+      let latitude = 20.5937, longitude = 78.9629;
+      if (navigator.geolocation) {
+        await new Promise<void>((resolve) => {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+            resolve();
+          }, () => resolve());
+        });
+      }
+      const w = await fetchWeather({ latitude, longitude });
+      setWeather(w);
+      const s = await fetchSatellite({ latitude, longitude });
+      setSatellite(s);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const getSeverityColor = (severity: string) => {
@@ -155,10 +175,10 @@ const DetectionPage: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Pest Detection & Classification
+            {t('pest_detection_title')}
           </h1>
           <p className="text-xl text-gray-600">
-            Upload an image to identify pests in your peanut crops using advanced CNN technology
+            {t('pest_detection_subtitle')}
           </p>
         </div>
 
@@ -199,10 +219,10 @@ const DetectionPage: React.FC = () => {
                 <Camera className="h-16 w-16 text-gray-400 mx-auto" />
                 <div>
                   <p className="text-lg font-medium text-gray-900">
-                    Drop your image here, or click to select
+                    {t('drop_image')}
                   </p>
                   <p className="text-sm text-gray-500">
-                    Supports JPG, PNG, GIF up to 10MB
+                    {t('supports_types')}
                   </p>
                 </div>
               </div>
@@ -226,12 +246,12 @@ const DetectionPage: React.FC = () => {
                 {isProcessing ? (
                   <>
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Processing...
+                    {t('processing')}
                   </>
                 ) : (
                   <>
                     <Upload className="mr-2 h-5 w-5" />
-                    Detect Pest
+                    {t('detect_pest')}
                   </>
                 )}
               </button>
@@ -312,6 +332,100 @@ const DetectionPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Weather and Satellite Insights */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+              <div className="bg-white p-6 rounded-lg border">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('weather_advice')}</h3>
+                {weather ? (
+                  <div className="text-sm text-gray-700 space-y-2">
+                    <div>Temp: <span className="font-semibold">{weather.temp_c} °C</span></div>
+                    <div>Rain (24h): <span className="font-semibold">{weather.rain_mm_next_24h} mm</span></div>
+                    <div className="mt-2 text-gray-800">{weather.advice}</div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">—</div>
+                )}
+              </div>
+              <div className="bg-white p-6 rounded-lg border">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('satellite_ndvi')}</h3>
+                {satellite ? (
+                  <div className="text-sm text-gray-700 space-y-2">
+                    <div>NDVI: <span className="font-semibold">{satellite.ndvi}</span></div>
+                    <div className="mt-2 text-gray-800">{satellite.description}</div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">—</div>
+                )}
+              </div>
+            </div>
+
+            {/* Alerts and Feedback */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+              <div className="bg-white p-6 rounded-lg border space-y-3">
+                <h3 className="text-lg font-semibold text-gray-900">{t('send_whatsapp')}</h3>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder={t('phone_number')}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={async () => {
+                    if (!result || !phone) return;
+                    try {
+                      const text = `${result.pestName} (${result.confidence.toFixed(1)}%). ${weather ? weather.advice : ''}`;
+                      await sendAlert({ to_phone: phone, message: text });
+                      alert('Alert sent');
+                    } catch (e) {
+                      console.error(e);
+                      alert('Failed to send alert');
+                    }
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm"
+                >
+                  {t('send_whatsapp')}
+                </button>
+              </div>
+              <div className="bg-white p-6 rounded-lg border space-y-3">
+                <h3 className="text-lg font-semibold text-gray-900">{t('submit_feedback')}</h3>
+                <input
+                  type="text"
+                  value={correctLabel}
+                  onChange={(e) => setCorrectLabel(e.target.value)}
+                  placeholder={t('correct_label')}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                />
+                <textarea
+                  value={comments}
+                  onChange={(e) => setComments(e.target.value)}
+                  placeholder={t('comments')}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm h-24"
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      await submitFeedback({
+                        image_id: selectedFile ? selectedFile.name : undefined,
+                        predicted_label: result ? result.pestName : undefined,
+                        correct_label: correctLabel || undefined,
+                        comments: comments || undefined,
+                      });
+                      alert('Thanks for your feedback');
+                      setCorrectLabel('');
+                      setComments('');
+                    } catch (e) {
+                      console.error(e);
+                      alert('Failed to submit feedback');
+                    }
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm"
+                >
+                  {t('submit_feedback')}
+                </button>
               </div>
             </div>
           </div>
